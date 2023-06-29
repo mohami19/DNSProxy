@@ -1,7 +1,7 @@
 import socket
 
 PORT = 5005
-HOST = '127.0.0.1'
+HOST = '127.0.0.2'
 
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 input = input("Enter the domain name : ")
