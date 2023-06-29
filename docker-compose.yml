@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  dns_proxy:
+    build: .
+    ports:
+      - "53:53/udp"
+    restart: always
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
