@@ -21,10 +21,19 @@ def parse_dns_packet(packet):
         i += length + 1
     i += 1
     qtype, qclass = struct.unpack('!HH', packet[i:i+4])
-    extra = ''
-    #if qtype != 1:
-    #    header[3] = (header[3] & 0xF0) | 0x04
-    return header, qname[:-1], qtype, qclass ,extra
+    
+    return header, qname[:-1], qtype, qclass
+
+
+def change_rcode(packet):
+    
+    temp = bytearray(packet)[2] | 0x80
+    temp2 = bytearray(packet)[3] | 0x04
+    qname_end = packet.find(b'\x00', 12) + 5
+    
+    packet = bytes(packet[0:2]) + temp.to_bytes(1, 'big') + temp2.to_bytes(1, 'big') + bytes(packet[4:qname_end])
+    
+    return packet
 
 def change_id(packet1, packet2):
     
@@ -33,10 +42,10 @@ def change_id(packet1, packet2):
     question_section = packet1[header_length:qname_end]
     qname_start = header_length
     qname_end = packet2.find(b'\x00', qname_start) + 5
-    modified_packet2 = packet1[0:2] + packet2[2:qname_start] + question_section + packet2[qname_end:]
+    packet = packet1[0:2] + packet2[2:qname_start] + question_section + packet2[qname_end:]
     
     
-    return bytes(modified_packet2)
+    return bytes(packet)
 
 def db_select():
     r = redis.Redis(host='localhost', port=6379, db=0)
@@ -61,28 +70,23 @@ def db_insert(key, result):
 
 def dns(data,dns_proxy,s,cache):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.connect(('8.8.8.8', 53))
+    sock.connect(('1.1.1.1', 53))
     
-    domain = parse_dns_packet(data)[1]
-    print(domain)
-    if domain in cache:
-        x = change_id(data, cache[domain][1])
-        print(data)
-        print(x)
-        s.sendto(x,addr)
+    parsed_data = parse_dns_packet(data)
+    domain = parsed_data[1]
+    if parsed_data[2] == (1 or 28): 
+        if domain in cache:
+            response_data = change_id(data, cache[domain][1])
+        else:
+            sock.send(data)
+            response_data, response_addr = sock.recvfrom(1024)
+            time = int((datetime.datetime.today()-datetime.datetime(2023,1,1,0,0,0,0)).total_seconds())
+            cache[domain] = [time, response_data]
+            db_insert(data, response_data)
     else:
-        print("here")
-        sock.send(data)
-        response_data, response_addr = sock.recvfrom(1024)
-        print(data)
-        print(response_data)
-        
-        time = int((datetime.datetime.today()-datetime.datetime(2023,1,1,0,0,0,0)).total_seconds())
-        cache[domain] = [time, response_data]
-
-        db_insert(data, response_data)
-
-        s.sendto(response_data,addr)
+        response_data = (change_rcode(data))
+    
+    s.sendto(response_data, addr)
 
 with open('setting.json') as file:
 
