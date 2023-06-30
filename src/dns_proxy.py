@@ -61,6 +61,7 @@ def db_insert(key, result):
     r.lpush(key, result)
 
 def dns(data,dns_proxy,s,cache, expiration_time):
+    
     for i in dns_proxy:    
         
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -69,14 +70,13 @@ def dns(data,dns_proxy,s,cache, expiration_time):
         domain = parsed_data[1]
         time = int((datetime.datetime.today()-datetime.datetime(2023,1,1,0,0,0,0)).total_seconds())
         
-        if parsed_data[2] == (1 or 28): 
+        if parsed_data[2] in [1 , 28]: 
             if domain in cache and not time - cache[domain][0] > expiration_time:
                 response_data = change_id(data, cache[domain][1])
             else:
                 sock.send(data)
                 response_data, response_addr = sock.recvfrom(1024)
                 parsed_response_data = parse_dns_packet(response_data)
-                
                 if (parsed_response_data[0][3] & 0x0F) == 0x00:
                     time = int((datetime.datetime.today()-datetime.datetime(2023,1,1,0,0,0,0)).total_seconds())
                     cache.update({domain: [time, response_data]})
