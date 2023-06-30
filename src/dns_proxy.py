@@ -4,6 +4,7 @@ import json
 import redis
 import datetime
 import struct
+import threading
 
 def parse_dns_packet(packet):
     header = packet[:12]
@@ -16,7 +17,7 @@ def parse_dns_packet(packet):
         qname += packet[i+1:i+1+length].decode() + '.'
         i += length + 1
     qtype, qclass = struct.unpack('!HH', packet[i:i+4])
-    extra = packet[i+4:]
+    extra = ''
     return header, qname[:-1], qtype, qclass ,extra
 
 def db_select():
@@ -42,38 +43,43 @@ def db_insert(key, result):
 with open('setting.json') as file:
     setting = json.load(file)
 expiration_time = setting['cache_expiration_time']
+dns_proxy = setting['list_of_ips']
+
 HOST = "127.0.0.3"
 PORT = 5006
 cache_redis = db_select()
-s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.bind((HOST, PORT))
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.connect(('8.8.8.8', 53))
 
-start = time.time()
-cache = {}
-
-while True:
-    data,addr = s.recvfrom(512)
-    
+def dns(data,dns_proxy,s,cache):
     if data in cache:
         print("in dns cache")
     else:
-        sock.sendto(data, ('8.8.8.8', 53))
+        sock.sendto(data, (dns_proxy, 53))
         response_data, response_addr = sock.recvfrom(1024)
+        print(response_data)
         result = (socket.getaddrinfo(parse_dns_packet(response_data)[1],80))
         IPs = {result[0][4][0]}
         for i in result:
             IPs.add(i[4][0])
         cache.update({data : IPs})
         db_insert(parse_dns_packet(response_data)[1], IPs)
-        
+
     clear_cache = time.time()
     if clear_cache - start >= float(expiration_time):
         cache.clear()
         cache_redis.clear()
         start = time.time()
-    
+
     for i in IPs:
         s.sendto(i.encode(),addr)
+
+cache = {}
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.bind((HOST, PORT))
+start = time.time()
+while True:
+    data,addr = s.recvfrom(512)
+    threading.Thread(target=dns, args=(data,dns_proxy,s,cache)).start()
+    
