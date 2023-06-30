@@ -68,25 +68,33 @@ def db_insert(key, result):
 
 
 
-def dns(data,dns_proxy,s,cache):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.connect(('1.1.1.1', 53))
+def dns(data,dns_proxy,s,cache, expiration_time):
     
-    parsed_data = parse_dns_packet(data)
-    domain = parsed_data[1]
-    if parsed_data[2] == (1 or 28): 
-        if domain in cache:
-            response_data = change_id(data, cache[domain][1])
+    for i in dns_proxy:
+        
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect((i, 53))
+        parsed_data = parse_dns_packet(data)
+        domain = parsed_data[1]
+        time = int((datetime.datetime.today()-datetime.datetime(2023,1,1,0,0,0,0)).total_seconds())
+        if parsed_data[2] == (1 or 28): 
+            if domain in cache and not time - cache[domain][0] > expiration_time:
+                response_data = change_id(data, cache[domain][1])
+            else:
+                sock.send(data)
+                response_data, response_addr = sock.recvfrom(1024)
+                parsed_response_data = parse_dns_packet(response_data)
+                
+                if (parsed_response_data[0][3] & 0x0F) == 0x00:
+                    time = int((datetime.datetime.today()-datetime.datetime(2023,1,1,0,0,0,0)).total_seconds())
+                    cache.update({domain: [time, response_data]})
+                    db_insert(data, response_data)
+                    break
         else:
-            sock.send(data)
-            response_data, response_addr = sock.recvfrom(1024)
-            time = int((datetime.datetime.today()-datetime.datetime(2023,1,1,0,0,0,0)).total_seconds())
-            cache[domain] = [time, response_data]
-            db_insert(data, response_data)
-    else:
-        response_data = (change_rcode(data))
+            response_data = (change_rcode(data))
     
     s.sendto(response_data, addr)
+
 
 with open('setting.json') as file:
 
@@ -106,6 +114,6 @@ s.bind((HOST, PORT))
 start = time.time()
 while True:
     data,addr = s.recvfrom(512)
-    dns(data,dns_proxy, s, cache)
+    dns(data,dns_proxy, s, cache, expiration_time)
     #threading.Thread(target=dns, args=(data,dns_proxy,s,cache)).start()
     
