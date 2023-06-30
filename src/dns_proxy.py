@@ -5,10 +5,7 @@ import redis
 import datetime
 import struct
 import threading
-
- 
     
-
 def parse_dns_packet(packet):
     header = bytearray(packet[:12])
     qname = ''
@@ -24,9 +21,7 @@ def parse_dns_packet(packet):
     
     return header, qname[:-1], qtype, qclass
 
-
-def change_rcode(packet):
-    
+def change_rcode(packet):    
     temp = bytearray(packet)[2] | 0x80
     temp2 = bytearray(packet)[3] | 0x04
     qname_end = packet.find(b'\x00', 12) + 5
@@ -43,7 +38,6 @@ def change_id(packet1, packet2):
     qname_start = header_length
     qname_end = packet2.find(b'\x00', qname_start) + 5
     packet = packet1[0:2] + packet2[2:qname_start] + question_section + packet2[qname_end:]
-    
     
     return bytes(packet)
 
@@ -66,17 +60,15 @@ def db_insert(key, result):
     r.lpush(key, int((datetime.datetime.today()-datetime.datetime(2023,1,1,0,0,0,0)).total_seconds()))
     r.lpush(key, result)
 
-
-
 def dns(data,dns_proxy,s,cache, expiration_time):
-    
-    for i in dns_proxy:
+    for i in dns_proxy:    
         
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.connect((i, 53))
         parsed_data = parse_dns_packet(data)
         domain = parsed_data[1]
         time = int((datetime.datetime.today()-datetime.datetime(2023,1,1,0,0,0,0)).total_seconds())
+        
         if parsed_data[2] == (1 or 28): 
             if domain in cache and not time - cache[domain][0] > expiration_time:
                 response_data = change_id(data, cache[domain][1])
@@ -95,10 +87,9 @@ def dns(data,dns_proxy,s,cache, expiration_time):
     
     s.sendto(response_data, addr)
 
-
 with open('setting.json') as file:
-
     setting = json.load(file)
+    
 expiration_time = setting['cache_expiration_time']
 dns_proxy = setting['list_of_ips']
 
@@ -106,14 +97,12 @@ HOST = "127.0.0.3"
 PORT = 5006
 cache_redis = db_select()
 
-
-
 cache = {}
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.bind((HOST, PORT))
 start = time.time()
+
 while True:
     data,addr = s.recvfrom(512)
-    dns(data,dns_proxy, s, cache, expiration_time)
-    #threading.Thread(target=dns, args=(data,dns_proxy,s,cache)).start()
+    threading.Thread(target=dns, args=(data,dns_proxy,s,cache,expiration_time)).start()
     
