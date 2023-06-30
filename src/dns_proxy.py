@@ -6,6 +6,70 @@ import datetime
 import struct
 import threading
 
+def parse_dns_packet_new(data):
+    # Parse the DNS packet header
+    header = struct.unpack('!6H', data[:12])
+    query_id = header[0]
+    flags = header[1]
+    question_count = header[2]
+    answer_count = header[3]
+    
+    # Parse the DNS queries
+    offset = 12
+    queries = []
+    for i in range(question_count):
+        domain_name, offset = parse_domain_name(data, offset)
+        query_type, query_class = struct.unpack('!2H', data[offset:offset+4])
+        offset += 4
+        queries.append((domain_name, query_type, query_class))
+
+    # Parse the DNS resource records in the answer section
+    answer_offset = offset
+    answers = []
+    for i in range(answer_count):
+        domain_name, answer_type, answer_class, ttl, ip_address = parse_resource_record(data, answer_offset)
+        answers.append((domain_name, answer_type, answer_class, ttl, ip_address))
+
+    return (query_id, flags, queries, answers)
+
+def parse_domain_name(data, offset):
+    domain_name = ''
+    while True:
+        label_length = data[offset]
+        offset += 1
+        if label_length == 0:
+            break
+        elif label_length & 0xC0 == 0xC0:
+            # This is a pointer to a domain name elsewhere in the packet
+            pointer_offset = struct.unpack('!H', data[offset-1:offset+1])[0] & 0x3FFF
+            domain_name += parse_domain_name(data, pointer_offset)[0]
+            offset += 1
+            break
+        else:
+            domain_name += data[offset:offset+label_length].decode('utf-8') + '.'
+            offset += label_length
+    return (domain_name, offset)
+
+def parse_resource_record(data, offset):
+    domain_name, offset = parse_domain_name(data, offset)
+    resource_type, resource_class, ttl, data_length = struct.unpack('!HHLH', data[offset:offset+10])
+    offset += 10
+    if data_length > 0:
+        if resource_type == 1:  # A record
+            # Parse the IPv4 address
+            ip_address = socket.inet_ntoa(data[offset:offset+4])
+            return (domain_name, resource_type, resource_class, ttl, ip_address)
+        elif resource_type == 28:  # AAAA record
+            # Parse the IPv6 address
+            ip_address = socket.inet_ntop(socket.AF_INET6, data[offset:offset+16])
+            return (domain_name, resource_type, resource_class, ttl, ip_address)
+        else:
+            # Parse other types of resource records as byte strings
+            return (domain_name, resource_type, resource_class, ttl, data[offset:offset+data_length])
+    else:
+        return (domain_name, resource_type, resource_class, ttl, None)
+    
+
 def parse_dns_packet(packet):
     header = packet[:12]
     qname = ''
