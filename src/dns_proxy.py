@@ -87,6 +87,9 @@ def dns(data,dns_proxy,s,cache, expiration_time):
     
     s.sendto(response_data, addr)
 
+
+
+
 with open('setting.json') as file:
     setting = json.load(file)
     
