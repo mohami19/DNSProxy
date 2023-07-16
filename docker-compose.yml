@@ -2,15 +2,19 @@ version: '3'
 
 services:
   dns_proxy:
+  
     build: .
-    ports:
-      - "53:53/udp"
+    #ports:
+    #  - "53:53/udp"
+    network_mode : host
     restart: always
     depends_on:
       - redis
 
   redis:
     image: redis:alpine
+    ports:
+      - "6379:6379"
     restart: always
     
     volumes:

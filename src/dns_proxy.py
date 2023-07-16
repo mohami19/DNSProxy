@@ -72,6 +72,7 @@ def dns(data,dns_proxy,s,cache, expiration_time):
         
         if parsed_data[2] in [1 , 28]: 
             if domain in cache and not time - cache[domain][0] > expiration_time:
+                print('its in cache')
                 response_data = change_id(data, cache[domain][1])
             else:
                 sock.send(data)
